@@ -2,3 +2,4 @@
 
 Printable miniature dioramas, wasteland scenery,
 modular roomboxes and DIY papercraft display models.
+Website homepage preview uploaded.
