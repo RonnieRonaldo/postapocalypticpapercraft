@@ -1,0 +1,18 @@
+POST-APOCALYPTIC PAPERCRAFT — GA4 & CONSENT
+
+Upload index.html, privacy.html, wrangler.jsonc and the assets folder into the ROOT of the GitHub repository. Do not upload this text file unless desired.
+
+Measurement ID: G-W4KFL9BGH0
+
+TEST:
+1. Wait for Cloudflare deployment to show Ready.
+2. Open the site in a private/incognito browser window.
+3. Reject analytics: the site works and no gtag/js request should load.
+4. Open Cookie settings in the footer; choose Analytics and Save.
+5. Open Google Analytics > Reports > Realtime; allow a few minutes for your own visit to appear.
+6. Revoke via Cookie settings; no further Analytics events should be sent.
+7. Note: browser blockers may suppress GA4 even after consent.
+
+The site remains noindex until real product pages and photos are ready.
+The preview uses concept images.
+Before public launch, add an actual operator/contact identity to the privacy page and review legal disclosures for the countries you serve.
