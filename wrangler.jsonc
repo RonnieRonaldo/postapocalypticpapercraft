@@ -2,15 +2,8 @@
   "name": "postapocalypticpapercraft",
   "compatibility_date": "2026-10-25",
   "main": "src/worker.js",
-  "assets": {
-    "directory": "./",
-    "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
-  },
+  "assets": { "directory": "./", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
   "r2_buckets": [
-    {
-      "binding": "DOWNLOADS",
-      "bucket_name": "post-apo-papercraft-downloads"
-    }
+    { "binding": "DOWNLOADS", "bucket_name": "post-apo-papercraft-downloads" }
   ]
 }
