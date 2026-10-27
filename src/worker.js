@@ -72,6 +72,24 @@ async function handle(req,env){
   const url=new URL(req.url),path=url.pathname;
   if(path==='/api/health')return json({status:'ok',downloadsConfigured:!!env.DOWNLOADS,webhookSecretConfigured:!!env.PADDLE_WEBHOOK_SECRET,databaseConfigured:!!env.DB,paddleApiConfigured:!!env.PADDLE_API_KEY});
   if(path==='/api/paddle-webhook')return req.method==='POST'?webhook(req,env):json({error:'method not allowed'},405,{Allow:'POST'});
+  // Temporary admin-only Paddle API connectivity diagnostic. No customer data returned.
+  if(path==='/api/admin/paddle-check' && req.method==='POST'){
+    if(!env.PADDLE_DIAGNOSTIC_SECRET || !env.PADDLE_API_KEY) return json({error:'diagnostic not configured'},503);
+    const provided=req.headers.get('X-Diagnostic-Token')||'';
+    const expected=env.PADDLE_DIAGNOSTIC_SECRET;
+    if(provided.length!==expected.length || !equal(te.encode(provided),te.encode(expected))) return json({error:'not found'},404);
+    try{
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),8000);
+      let response;
+      try{response=await fetch('https://api.paddle.com/transactions?per_page=1',{
+        headers:{'Authorization':`Bearer ${env.PADDLE_API_KEY}`,'Accept':'application/json'},signal:controller.signal
+      });}finally{clearTimeout(timeout)}
+      // Return only HTTP status and connectivity; never return Paddle payloads or credentials.
+      return json({paddleApiReachable:response.ok,paddleStatus:response.status});
+    }catch{return json({paddleApiReachable:false,error:'request failed'},502)}
+  }
+
   if(!env.DB||!env.DOWNLOADS)return json({error:'service unavailable'},503);
   if(path==='/api/checkout-session'&&req.method==='POST'){
     if(!sameOrigin(req))return json({error:'origin rejected'},403);
