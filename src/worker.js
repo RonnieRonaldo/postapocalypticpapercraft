@@ -34,13 +34,11 @@ function equal(a,b) {if(a.length!==b.length)return false;let v=0;for(let i=0;i<a
 function fromHex(h){if(!/^[0-9a-f]{64}$/i.test(h||''))return null;return Uint8Array.from(h.match(/../g),x=>parseInt(x,16));}
 async function verifyPaddle(raw,signature,secret){if(!signature||!secret)return false;const parts=Object.fromEntries(signature.split(';').map(p=>p.trim().split('=',2)));const ts=parts.ts;const mac=fromHex(parts.h1);if(!/^\d+$/.test(ts||'')||!mac||Math.abs(Date.now()/1000-Number(ts))>300)return false;const key=await crypto.subtle.importKey('raw',te.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);const actual=new Uint8Array(await crypto.subtle.sign('HMAC',key,te.encode(`${ts}:${raw}`)));return equal(actual,mac);}
 function matchedProduct(data) {
-  if (!Array.isArray(data?.items)) return null;
-  const found = Object.entries(PRODUCTS).filter(([, p]) =>
-    data.items.some(x => x.price?.id === p.priceId &&
-      (x.price?.product_id === p.productId || x.product?.id === p.productId)));
-  // Each checkout currently sells exactly one supported product. Never silently grant
-  // only one entitlement for a multi-product cart.
-  return found.length === 1 ? found[0][1] : null;
+  if (!Array.isArray(data?.items) || data.items.length !== 1) return null;
+  const item = data.items[0];
+  if (item.quantity !== 1) return null;
+  return Object.values(PRODUCTS).find(p => item.price?.id === p.priceId &&
+    (item.price?.product_id === p.productId || item.product?.id === p.productId)) || null;
 }
 function validTxnId(id){return /^txn_[a-z0-9]{10,80}$/.test(id||'');}
 async function saveOrder(env, data, product){
@@ -72,28 +70,12 @@ async function handle(req,env){
   const url=new URL(req.url),path=url.pathname;
   if(path==='/api/health')return json({status:'ok',downloadsConfigured:!!env.DOWNLOADS,webhookSecretConfigured:!!env.PADDLE_WEBHOOK_SECRET,databaseConfigured:!!env.DB,paddleApiConfigured:!!env.PADDLE_API_KEY});
   if(path==='/api/paddle-webhook')return req.method==='POST'?webhook(req,env):json({error:'method not allowed'},405,{Allow:'POST'});
-  // Temporary admin-only Paddle API connectivity diagnostic. No customer data returned.
-  if(path==='/api/admin/paddle-check' && req.method==='POST'){
-    if(!env.PADDLE_DIAGNOSTIC_SECRET || !env.PADDLE_API_KEY) return json({error:'diagnostic not configured'},503);
-    const provided=req.headers.get('X-Diagnostic-Token')||'';
-    const expected=env.PADDLE_DIAGNOSTIC_SECRET;
-    if(provided.length!==expected.length || !equal(te.encode(provided),te.encode(expected))) return json({error:'not found'},404);
-    try{
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),8000);
-      let response;
-      try{response=await fetch('https://api.paddle.com/transactions?per_page=1',{
-        headers:{'Authorization':`Bearer ${env.PADDLE_API_KEY}`,'Accept':'application/json'},signal:controller.signal
-      });}finally{clearTimeout(timeout)}
-      // Return only HTTP status and connectivity; never return Paddle payloads or credentials.
-      return json({paddleApiReachable:response.ok,paddleStatus:response.status});
-    }catch{return json({paddleApiReachable:false,error:'request failed'},502)}
-  }
-
   if(!env.DB||!env.DOWNLOADS)return json({error:'service unavailable'},503);
   if(path==='/api/checkout-session'&&req.method==='POST'){
     if(!sameOrigin(req))return json({error:'origin rejected'},403);
-    const nonce=randomHex();return json({checkoutNonce:nonce},200,{'Set-Cookie':setCookie('postapo_checkout',nonce,3600)});
+    let body;try{body=await req.json()}catch{return json({error:'invalid JSON'},400)}
+    if(!Object.hasOwn(PRODUCTS,body?.product))return json({error:'unknown product'},400);
+    const nonce=randomHex();return json({checkoutNonce:nonce,priceId:PRODUCTS[body.product].priceId},200,{'Set-Cookie':setCookie('postapo_checkout',nonce,3600)});
   }
   if(path==='/api/claim'&&req.method==='POST'){
     if(!sameOrigin(req))return json({error:'origin rejected'},403);
@@ -105,7 +87,8 @@ async function handle(req,env){
     const product=matchedProduct(txn);
     if(!txn||txn.status!=='completed'||!product||txn.custom_data?.postapo_checkout_nonce!==nonce)return json({error:'transaction not eligible'},403);
     await saveOrder(env,txn,product);
-    const order=await env.DB.prepare('SELECT id FROM orders WHERE paddle_transaction_id=?').bind(id).first();
+    const order=await env.DB.prepare('SELECT id FROM orders WHERE paddle_transaction_id=? AND product_id=?').bind(id,product.productId).first();
+    if(!order)return json({error:'order unavailable'},503);
     const token=randomHex(),hash=await sha256(token);
     await env.DB.prepare(`INSERT INTO download_tokens(order_id,token_hash,expires_at) VALUES(?,?,datetime('now','+7 days'))`).bind(order.id,hash).run();
     return json({ok:true,downloadPage:'/downloads'},200,{'Set-Cookie':setCookie('postapo_access',token,TTL)});
