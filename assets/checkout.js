@@ -1,13 +1,10 @@
-/* Paddle checkout, release gate OFF until sandbox and delivery tests pass. */
+/* Post-Apo checkout: keep production purchase buttons OFF until full delivery testing. */
 (() => {
   'use strict';
-  const CHECKOUT_ENABLED = false; // Change only after complete end-to-end testing.
+  const CHECKOUT_ENABLED = false;
   const CLIENT_TOKEN = 'live_2980fd5ee59e380d298507a6e18';
   const PADDLE_SCRIPT = 'https://cdn.paddle.com/paddle/v2/paddle.js';
   let buttons = document.querySelectorAll('[data-buy-product]');
-  // Owner-only visibility switch for a checkout-opening smoke test.
-  // This is NOT authentication: anyone with the URL can open a LIVE checkout.
-  // Do not pay; do not use this to test fulfillment.
   const testMode = new URLSearchParams(location.search).get('checkout_test') === '1';
   if (!CHECKOUT_ENABLED && !testMode) return;
   if (testMode && !CHECKOUT_ENABLED) {
@@ -18,7 +15,7 @@
     const heading = document.createElement('strong');
     heading.textContent = 'CHECKOUT OPENING TEST, LIVE PADDLE';
     const note = document.createElement('p');
-    note.textContent = 'Only check the product and price. Do not enter payment details or complete a purchase. Close the checkout after checking.';
+    note.textContent = 'Only check the product and price. Do not enter payment details or complete a purchase.';
     const testButton = document.createElement('button');
     testButton.type = 'button';
     testButton.className = 'cta';
@@ -26,46 +23,96 @@
     testButton.dataset.buyProduct = 'box';
     panel.append(heading, note, testButton);
     heroButton.insertAdjacentElement('afterend', panel);
-    // Keep the production Buy buttons disabled and unmodified.
     buttons = [testButton];
   }
   let ready;
-  const loadPaddle = () => ready ||= new Promise((resolve,reject) => {
+  const loadPaddle = () => ready ||= new Promise((resolve, reject) => {
     if (window.Paddle) return resolve(window.Paddle);
-    const s=document.createElement('script');s.src=PADDLE_SCRIPT;s.async=true;
-    s.onload=()=>window.Paddle?resolve(window.Paddle):reject(new Error('Paddle unavailable'));
-    s.onerror=()=>reject(new Error('Unable to load checkout'));
+    const s = document.createElement('script');
+    s.src = PADDLE_SCRIPT;
+    s.async = true;
+    s.onload = () => window.Paddle ? resolve(window.Paddle) : reject(new Error('Paddle unavailable'));
+    s.onerror = () => reject(new Error('Unable to load checkout'));
     document.head.appendChild(s);
   });
-  const message = (text) => {const el=document.getElementById('checkout-message');if(el){el.textContent=text;el.hidden=false;}else alert(text);};
-  let busy=false;
-  for (const button of buttons) {
-    if (CHECKOUT_ENABLED) button.removeAttribute('aria-disabled');
-    if (CHECKOUT_ENABLED) button.textContent = button.dataset.buyProduct === 'deluxe' ? 'Buy & Download, $5.45' : 'Buy & Download, $4.75';
-    button.addEventListener('click', async e => {
-      e.preventDefault();if(busy)return;busy=true;
-      try {
-        const product=button.dataset.buyProduct;
-        const res=await fetch('/api/checkout-session',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({product})});
-        if(!res.ok)throw Error('Unable to create secure checkout session');
-        const session=await res.json();
-        const Paddle=await loadPaddle();
-        if(!window.__postapoPaddleInit){
-          Paddle.Initialize({token:CLIENT_TOKEN,eventCallback:async event=>{
-            if(event.name!=='checkout.completed')return;
-            const txnId=event.data?.transaction_id || event.data?.transaction?.id;
-            if(!txnId){message('Payment received. Please contact support with your receipt.');return;}
-            try{
-              const r=await fetch('/api/claim',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({transactionId:txnId})});
-              if(!r.ok)throw Error('Verification pending');
-              const data=await r.json();window.location.assign(data.downloadPage||'/downloads');
-            }catch{message('Payment completed, but download verification is pending. Please contact support with your Paddle receipt.');}
-          }});
-          window.__postapoPaddleInit=true;
+  const message = (text) => {
+    const el = document.getElementById('checkout-message');
+    if (el) { el.textContent = text; el.hidden = false; }
+    else alert(text);
+  };
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  let claimInProgress = false;
+  async function claimWithRetry(transactionId) {
+    if (claimInProgress) return;
+    claimInProgress = true;
+    const deadline = Date.now() + 30000;
+    message('Payment received. Verifying your purchase, please wait…');
+    try {
+      while (true) {
+        let response;
+        try {
+          response = await fetch('/api/claim', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transactionId })
+          });
+        } catch (_) {
+          if (Date.now() >= deadline) break;
+          await wait(2000);
+          continue;
         }
-        Paddle.Checkout.open({items:[{priceId:session.priceId,quantity:1}],customData:{website:'postapocalypticpapercraft.com',product,postapo_checkout_nonce:session.checkoutNonce}});
-      }catch(err){message(err.message||'Checkout temporarily unavailable');}
-      finally{busy=false;}
+        if (response.ok) {
+          const data = await response.json();
+          window.location.assign(data.downloadPage || '/downloads');
+          return;
+        }
+        // Only pending processing (409) and temporary server/API failures (503/502/504)
+        // are retryable. A 403 is a permanent eligibility failure, not a pending payment.
+        if (![409, 502, 503, 504].includes(response.status)) break;
+        if (Date.now() >= deadline) break;
+        await wait(Math.min(2000, Math.max(0, deadline - Date.now())));
+      }
+      message('Your payment may be complete, but download verification is not ready. Please contact us with your Paddle receipt. Do not pay again.');
+    } finally { claimInProgress = false; }
+  }
+  let busy = false;
+  for (const button of buttons) {
+    if (CHECKOUT_ENABLED) {
+      button.removeAttribute('aria-disabled');
+      button.textContent = button.dataset.buyProduct === 'deluxe' ? 'Buy & Download, $5.45' : 'Buy & Download, $4.75';
+    }
+    button.addEventListener('click', async e => {
+      e.preventDefault();
+      if (busy) return;
+      busy = true;
+      try {
+        const product = button.dataset.buyProduct;
+        const res = await fetch('/api/checkout-session', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product })
+        });
+        if (!res.ok) throw Error('Unable to create secure checkout session');
+        const session = await res.json();
+        const Paddle = await loadPaddle();
+        if (!window.__postapoPaddleInit) {
+          Paddle.Initialize({ token: CLIENT_TOKEN, eventCallback: async event => {
+            if (event.name !== 'checkout.completed') return;
+            const txnId = event.data?.transaction_id || event.data?.transaction?.id;
+            if (!txnId) {
+              message('Payment received. Please contact support with your receipt. Do not pay again.');
+              return;
+            }
+            await claimWithRetry(txnId);
+          }});
+          window.__postapoPaddleInit = true;
+        }
+        Paddle.Checkout.open({
+          items: [{ priceId: session.priceId, quantity: 1 }],
+          customData: { website: 'postapocalypticpapercraft.com', product, postapo_checkout_nonce: session.checkoutNonce }
+        });
+      } catch (err) { message(err.message || 'Checkout temporarily unavailable'); }
+      finally { busy = false; }
     });
   }
 })();
