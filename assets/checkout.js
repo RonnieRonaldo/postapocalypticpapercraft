@@ -1,31 +1,11 @@
-/* Post-Apo checkout: production buttons OFF. The query-parameter test uses REAL live Paddle payments; do not share test URL. */
+/* Post-Apo checkout: keep production purchase buttons OFF until full delivery testing. */
 (() => {
   'use strict';
-  const CHECKOUT_ENABLED = false;
+  const CHECKOUT_ENABLED = true;
   const CLIENT_TOKEN = 'live_2980fd5ee59e380d298507a6e18';
   const PADDLE_SCRIPT = 'https://cdn.paddle.com/paddle/v2/paddle.js';
   let buttons = document.querySelectorAll('[data-buy-product]');
-  // This URL flag is not authorization; the test checkout is publicly discoverable.
-  const testMode = new URLSearchParams(location.search).get('checkout_test') === '1';
-  if (!CHECKOUT_ENABLED && !testMode) return;
-  if (testMode && !CHECKOUT_ENABLED) {
-    const heroButton = buttons[0];
-    if (!heroButton) return;
-    const panel = document.createElement('div');
-    panel.style.cssText = 'margin:16px 0;padding:16px;background:#34251c;border:2px solid #ffd04b;color:#fff;max-width:500px';
-    const heading = document.createElement('strong');
-    heading.textContent = 'PRIVATE LIVE PURCHASE TEST, GAS STATION BOX';
-    const note = document.createElement('p');
-    note.textContent = 'This opens a REAL $4.75 Paddle checkout. Only proceed if you intentionally want to pay and test the full download flow. After payment, keep this browser open while verification runs. Do not pay twice if delivery fails.';
-    const testButton = document.createElement('button');
-    testButton.type = 'button';
-    testButton.className = 'cta';
-    testButton.textContent = 'Open live checkout, $4.75';
-    testButton.dataset.buyProduct = 'box';
-    panel.append(heading, note, testButton);
-    heroButton.insertAdjacentElement('afterend', panel);
-    buttons = [testButton];
-  }
+  buttons = Array.from(buttons).filter(button => button.dataset.buyProduct === 'box');
   let ready;
   const loadPaddle = () => ready ||= new Promise((resolve, reject) => {
     if (window.Paddle) return resolve(window.Paddle);
