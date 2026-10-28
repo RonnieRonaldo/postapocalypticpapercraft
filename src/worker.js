@@ -84,8 +84,11 @@ async function handle(req,env){
     const id=body?.transactionId,nonce=cookies(req).postapo_checkout;
     if(!validTxnId(id)||!nonce||!/^[0-9a-f]{64}$/.test(nonce))return json({error:'invalid claim'},400);
     let txn;try{txn=await paddleTransaction(env,id)}catch{return json({error:'Paddle unavailable'},503)}
+    if(!txn)return json({error:'Paddle transaction not yet available'},503);
+    if(txn.status==='billed'||txn.status==='paid'||txn.status==='ready')return json({error:'payment still processing'},409);
+    if(txn.status!=='completed')return json({error:'transaction not completed'},403);
     const product=matchedProduct(txn);
-    if(!txn||txn.status!=='completed'||!product||txn.custom_data?.postapo_checkout_nonce!==nonce)return json({error:'transaction not eligible'},403);
+    if(!product||txn.custom_data?.postapo_checkout_nonce!==nonce)return json({error:'transaction not eligible'},403);
     await saveOrder(env,txn,product);
     const order=await env.DB.prepare('SELECT id FROM orders WHERE paddle_transaction_id=? AND product_id=?').bind(id,product.productId).first();
     if(!order)return json({error:'order unavailable'},503);
@@ -105,11 +108,11 @@ async function handle(req,env){
   }
   if(path==='/downloads'&&req.method==='GET'){
     const access=await entitlement(req,env);
-    if(!access)return html('<!doctype html><html lang="en"><meta charset="utf-8"><title>Download access</title><body style="font:18px system-ui;background:#171717;color:white;padding:4rem"><h1>Download access unavailable</h1><p>Complete your purchase first, or return to the checkout browser. Access expires after 7 days.</p><a style="color:#ff9b50" href="/">Back to website</a></body></html>');
+    if(!access)return html('<!doctype html><html lang="en"><meta charset="utf-8"><title>Download access</title><meta name="robots" content="noindex,nofollow"><body style="font:18px system-ui;background:#171717;color:white;padding:4rem"><h1>Download access unavailable</h1><p>Complete your purchase first, or return to the checkout browser. Access expires after 7 days.</p><a style="color:#ff9b50" href="/">Back to website</a></body></html>');
     const product=Object.values(PRODUCTS).find(p=>p.productId===access.product_id);
     if(!product)return json({error:'product unavailable'},403);
     const safeTitle=product.title.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
-    return html(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Papercraft Downloads</title><style>body{font:17px system-ui;background:#171717;color:#f4ede4;max-width:740px;margin:8vh auto;padding:24px}a.file{display:block;margin:16px 0;padding:20px;border:1px solid #b96839;border-radius:12px;color:#fff;text-decoration:none;background:#30241e}small{color:#bbb}h1{color:#f6ad6c}</style><h1>Your ${safeTitle}</h1><p>Thank you for your purchase. Download any or all of your three PDF files.</p><a class="file" href="/api/file/a4">Download A4 model PDF</a><a class="file" href="/api/file/us">Download US Letter model PDF</a><a class="file" href="/api/file/guide">Download How-To PDF</a><small>Access is valid for seven days in this browser. Save your files after downloading.</small><p><a style="color:#f6ad6c" href="/">Back to website</a></p></html>`);
+    return html(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Papercraft Downloads</title><meta name="robots" content="noindex,nofollow"><style>body{font:17px system-ui;background:#171717;color:#f4ede4;max-width:740px;margin:8vh auto;padding:24px}a.file{display:block;margin:16px 0;padding:20px;border:1px solid #b96839;border-radius:12px;color:#fff;text-decoration:none;background:#30241e}small{color:#bbb}h1{color:#f6ad6c}</style><h1>Your ${safeTitle}</h1><p>Thank you for your purchase. Download any or all of your three PDF files.</p><a class="file" href="/api/file/a4">Download A4 model PDF</a><a class="file" href="/api/file/us">Download US Letter model PDF</a><a class="file" href="/api/file/guide">Download How-To PDF</a><small>Access is valid for seven days in this browser. Save your files after downloading.</small><p><a style="color:#f6ad6c" href="/">Back to website</a></p></html>`);
   }
   if(path.startsWith('/api/'))return json({error:'not found'},404);
   return env.ASSETS.fetch(req);
