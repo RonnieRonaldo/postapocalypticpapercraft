@@ -4,9 +4,9 @@ const PRODUCTS = Object.freeze({
     productId: 'pro_01m5wacs28dn9tjjcka49ggtq7',
     title: 'Gas Station Box',
     files: {
-      a4: ['gas-stations/Gas-Station-Box.pdf', 'Gas-Station-Box.pdf'],
-      us: ['gas-stations/Gas-Station-Box-US.pdf', 'Gas-Station-Box-US.pdf'],
-      guide: ['gas-stations/Gas-Station-Box-How-To.pdf', 'Gas-Station-Box-How-To.pdf']
+      a4: ['Gas-Station-Box.pdf', 'Gas-Station-Box.pdf'],
+      us: ['Gas-Station-Box-US.pdf', 'Gas-Station-Box-US.pdf'],
+      guide: ['Gas-Station-Box-How-To.pdf', 'Gas-Station-Box-How-To.pdf']
     }
   },
   deluxe: {
@@ -14,9 +14,9 @@ const PRODUCTS = Object.freeze({
     productId: 'pro_01m5yy7bsq8kxf2rkdagbnbnk9',
     title: 'Abandoned Gas Station, Deluxe Edition',
     files: {
-      a4: ['gas-stations/Gas-Station-Deluxe-A4.pdf', 'Gas-Station-Deluxe-A4.pdf'],
-      us: ['gas-stations/Gas-Station-Deluxe-US.pdf', 'Gas-Station-Deluxe-US.pdf'],
-      guide: ['gas-stations/Gas-Station-Box-How-To.pdf', 'Gas-Station-Box-How-To.pdf']
+      a4: ['Gas-Station-Deluxe-A4.pdf', 'Gas-Station-Deluxe-A4.pdf'],
+      us: ['Gas-Station-Deluxe-US.pdf', 'Gas-Station-Deluxe-US.pdf'],
+      guide: ['Gas-Station-Box-How-To.pdf', 'Gas-Station-Box-How-To.pdf']
     }
   }
 });
