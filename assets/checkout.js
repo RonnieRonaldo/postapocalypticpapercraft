@@ -4,8 +4,31 @@
   const CHECKOUT_ENABLED = false; // Change only after complete end-to-end testing.
   const CLIENT_TOKEN = 'live_2980fd5ee59e380d298507a6e18';
   const PADDLE_SCRIPT = 'https://cdn.paddle.com/paddle/v2/paddle.js';
-  const BUTTONS = document.querySelectorAll('[data-buy-product]');
-  if (!CHECKOUT_ENABLED) return;
+  let buttons = document.querySelectorAll('[data-buy-product]');
+  // Owner-only visibility switch for a checkout-opening smoke test.
+  // This is NOT authentication: anyone with the URL can open a LIVE checkout.
+  // Do not pay; do not use this to test fulfillment.
+  const testMode = new URLSearchParams(location.search).get('checkout_test') === '1';
+  if (!CHECKOUT_ENABLED && !testMode) return;
+  if (testMode && !CHECKOUT_ENABLED) {
+    const heroButton = buttons[0];
+    if (!heroButton) return;
+    const panel = document.createElement('div');
+    panel.style.cssText = 'margin:16px 0;padding:16px;background:#34251c;border:2px solid #ffd04b;color:#fff;max-width:500px';
+    const heading = document.createElement('strong');
+    heading.textContent = 'CHECKOUT OPENING TEST, LIVE PADDLE';
+    const note = document.createElement('p');
+    note.textContent = 'Only check the product and price. Do not enter payment details or complete a purchase. Close the checkout after checking.';
+    const testButton = document.createElement('button');
+    testButton.type = 'button';
+    testButton.className = 'cta';
+    testButton.textContent = 'TEST: Open $4.75 checkout';
+    testButton.dataset.buyProduct = 'box';
+    panel.append(heading, note, testButton);
+    heroButton.insertAdjacentElement('afterend', panel);
+    // Keep the production Buy buttons disabled and unmodified.
+    buttons = [testButton];
+  }
   let ready;
   const loadPaddle = () => ready ||= new Promise((resolve,reject) => {
     if (window.Paddle) return resolve(window.Paddle);
@@ -16,9 +39,9 @@
   });
   const message = (text) => {const el=document.getElementById('checkout-message');if(el){el.textContent=text;el.hidden=false;}else alert(text);};
   let busy=false;
-  for (const button of BUTTONS) {
-    button.removeAttribute('aria-disabled');
-    button.textContent = button.dataset.buyProduct === 'deluxe' ? 'Buy & Download, $5.45' : 'Buy & Download, $4.75';
+  for (const button of buttons) {
+    if (CHECKOUT_ENABLED) button.removeAttribute('aria-disabled');
+    if (CHECKOUT_ENABLED) button.textContent = button.dataset.buyProduct === 'deluxe' ? 'Buy & Download, $5.45' : 'Buy & Download, $4.75';
     button.addEventListener('click', async e => {
       e.preventDefault();if(busy)return;busy=true;
       try {
