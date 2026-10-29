@@ -5,7 +5,7 @@
   const CLIENT_TOKEN = 'live_2980fd5ee59e380d298507a6e18';
   const PADDLE_SCRIPT = 'https://cdn.paddle.com/paddle/v2/paddle.js';
   let buttons = document.querySelectorAll('[data-buy-product]');
-  buttons = Array.from(buttons).filter(button => button.dataset.buyProduct === 'box');
+  buttons = Array.from(buttons);
   let ready;
   const loadPaddle = () => ready ||= new Promise((resolve, reject) => {
     if (window.Paddle) return resolve(window.Paddle);
