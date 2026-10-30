@@ -45,6 +45,7 @@
   document.getElementById('cookie-cancel').addEventListener('click', () => { settings.hidden = true; if (!consent) banner.hidden = false; });
   if (consent === 'granted') { gtag('consent', 'update', { analytics_storage: 'granted' }); loadAnalytics(); }
   else if (!consent) banner.hidden = false;
+  window.postapoAnalyticsAllowed=()=>consent==='granted'&&analyticsLoaded;
   // Category navigation: record only after consent, no invented conversions.
   document.querySelectorAll('nav a[href^="#"]').forEach(function (link) {
     link.addEventListener('click', function () {
