@@ -18,6 +18,16 @@ const PRODUCTS = Object.freeze({
       us: ['Gas-Station-Deluxe-US.pdf', 'Gas-Station-Deluxe-US.pdf'],
       guide: ['Gas-Station-Box-How-To.pdf', 'Gas-Station-Box-How-To.pdf']
     }
+  },
+  gothic: {
+    priceId: 'pri_01m67adbkatpdsfc15scnm5qfn',
+    productId: 'pro_01m67abwergma00cp80jckq8ek',
+    title: 'Gothic Horror Papercraft – 3 Helmet Bundle',
+    files: {
+      a4: ['pyramid-egg-Set-3X-A4.pdf', 'Gothic-Horror-Helmets-A4.pdf'],
+      us: ['pyramid-egg-Set-3X-US.pdf', 'Gothic-Horror-Helmets-US.pdf'],
+      guide: ['pyramid-head-egg-how-toA4.pdf', 'Gothic-Horror-Helmets-How-To.pdf']
+    }
   }
 });
 const te = new TextEncoder();
@@ -67,7 +77,7 @@ async function paddleTransaction(env,id){
 function html(s){return new Response(s,{headers:{...NO_STORE,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"}})}
 async function entitlement(req,env){const token=cookies(req).postapo_access;if(!token||!/^[0-9a-f]{64}$/.test(token))return null;const hash=await sha256(token);return env.DB.prepare(`SELECT o.id,o.paddle_transaction_id,o.product_id FROM download_tokens t JOIN orders o ON o.id=t.order_id WHERE t.token_hash=? AND t.revoked_at IS NULL AND t.expires_at > datetime('now') AND o.payment_status='completed' LIMIT 1`).bind(hash).first();}
 
-const RECOVERY_URLS=Object.freeze({box:'https://postapocalypticpapercraft.com/gas-station-box.html',deluxe:'https://postapocalypticpapercraft.com/abandoned-gas-station-deluxe.html'});
+const RECOVERY_URLS=Object.freeze({box:'https://postapocalypticpapercraft.com/gas-station-box.html',deluxe:'https://postapocalypticpapercraft.com/abandoned-gas-station-deluxe.html',gothic:'https://postapocalypticpapercraft.com/gothic-horror-papercraft.html'});
 async function recoveryCreate(env,product,nonce){
  const r=await fetch('https://api.paddle.com/transactions',{method:'POST',headers:{Authorization:`Bearer ${env.PADDLE_RECOVERY_API_KEY}`,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({items:[{price_id:PRODUCTS[product].priceId,quantity:1}],collection_mode:'automatic',checkout:{url:RECOVERY_URLS[product]},custom_data:{website:'postapocalypticpapercraft.com',product,postapo_checkout_nonce:nonce}})});
  if(!r.ok){console.error('Recovery create failed',r.status);return null;}
