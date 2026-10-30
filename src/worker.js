@@ -66,6 +66,15 @@ async function paddleTransaction(env,id){
 }
 function html(s){return new Response(s,{headers:{...NO_STORE,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"}})}
 async function entitlement(req,env){const token=cookies(req).postapo_access;if(!token||!/^[0-9a-f]{64}$/.test(token))return null;const hash=await sha256(token);return env.DB.prepare(`SELECT o.id,o.paddle_transaction_id,o.product_id FROM download_tokens t JOIN orders o ON o.id=t.order_id WHERE t.token_hash=? AND t.revoked_at IS NULL AND t.expires_at > datetime('now') AND o.payment_status='completed' LIMIT 1`).bind(hash).first();}
+
+const RECOVERY_URLS=Object.freeze({box:'https://postapocalypticpapercraft.com/gas-station-box.html',deluxe:'https://postapocalypticpapercraft.com/abandoned-gas-station-deluxe.html'});
+async function recoveryCreate(env,product,nonce){
+ const r=await fetch('https://api.paddle.com/transactions',{method:'POST',headers:{Authorization:`Bearer ${env.PADDLE_RECOVERY_API_KEY}`,'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({items:[{price_id:PRODUCTS[product].priceId,quantity:1}],collection_mode:'automatic',checkout:{url:RECOVERY_URLS[product]},custom_data:{website:'postapocalypticpapercraft.com',product,postapo_checkout_nonce:nonce}})});
+ if(!r.ok){console.error('Recovery create failed',r.status);return null;}
+ const data=await r.json();return validTxnId(data?.data?.id)?data.data.id:null;
+}
+
+function safeCheckoutUrl(actual,expected){try{const a=new URL(actual);const e=new URL(expected);return a.protocol==='https:'&&a.origin===e.origin&&a.pathname===e.pathname;}catch{return false;}}
 async function handle(req,env){
   const url=new URL(req.url),path=url.pathname;
   if(path==='/api/health')return json({status:'ok',downloadsConfigured:!!env.DOWNLOADS,webhookSecretConfigured:!!env.PADDLE_WEBHOOK_SECRET,databaseConfigured:!!env.DB,paddleApiConfigured:!!env.PADDLE_API_KEY});
@@ -76,6 +85,28 @@ async function handle(req,env){
     let body;try{body=await req.json()}catch{return json({error:'invalid JSON'},400)}
     if(!Object.hasOwn(PRODUCTS,body?.product))return json({error:'unknown product'},400);
     const nonce=randomHex();return json({checkoutNonce:nonce,priceId:PRODUCTS[body.product].priceId},200,{'Set-Cookie':setCookie('postapo_checkout',nonce,3600)});
+  }
+  if(path==='/api/recovery-start'&&req.method==='POST'){
+    if(!sameOrigin(req))return json({error:'origin rejected'},403);
+    if(!env.PADDLE_RECOVERY_API_KEY)return json({error:'recovery not configured'},503);
+    let body;try{body=await req.json()}catch{return json({error:'invalid JSON'},400)}
+    const product=body?.product;
+    if(!Object.hasOwn(PRODUCTS,product))return json({error:'unknown product'},400);
+    const nonce=randomHex();let id;
+    try{id=await recoveryCreate(env,product,nonce)}catch{return json({error:'Paddle unavailable'},503)}
+    if(!id)return json({error:'recovery creation failed'},502);
+    return json({transactionId:id},200,{'Set-Cookie':setCookie('postapo_checkout',nonce,3600)});
+  }
+  if(path==='/api/recovery-resume'&&req.method==='POST'){
+    if(!sameOrigin(req))return json({error:'origin rejected'},403);
+    let body;try{body=await req.json()}catch{return json({error:'invalid JSON'},400)}
+    if(!validTxnId(body?.transactionId)||!Object.hasOwn(PRODUCTS,body?.product))return json({error:'invalid request'},400);
+    if(!env.PADDLE_API_KEY)return json({error:'not configured'},503);
+    let txn;try{txn=await paddleTransaction(env,body.transactionId)}catch{return json({error:'Paddle unavailable'},503)}
+    const nonce=txn?.custom_data?.postapo_checkout_nonce;
+    const product=body.product;
+    if(!txn||txn.status==='completed'||!matchedProduct(txn)||txn.custom_data?.product!==product||txn.custom_data?.website!=='postapocalypticpapercraft.com'||!(/^[0-9a-f]{64}$/.test(nonce||''))||!txn.checkout?.url||!safeCheckoutUrl(txn.checkout.url,RECOVERY_URLS[product]))return json({error:'recovery not eligible'},403);
+    return json({transactionId:txn.id},200,{'Set-Cookie':setCookie('postapo_checkout',nonce,3600)});
   }
   if(path==='/api/claim'&&req.method==='POST'){
     if(!sameOrigin(req))return json({error:'origin rejected'},403);
