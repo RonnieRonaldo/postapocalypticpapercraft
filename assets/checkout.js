@@ -56,7 +56,7 @@
       message('Your payment may be complete, but download verification is not ready. Please contact us with your Paddle receipt. Do not pay again.');
     } finally { claimInProgress = false; }
   }
-  const track=(event,product)=>{if(window.postapoAnalyticsAllowed?.()&&typeof window.gtag==='function')window.gtag('event',event,{item_name:product==='deluxe'?'Gas Station Deluxe':'Gas Station Box',currency:'USD',value:product==='deluxe'?5.45:4.75});};
+  const track=(event,product)=>{if(window.postapoAnalyticsAllowed?.()&&typeof window.gtag==='function')window.gtag('event',event,{item_name:product==='gothic'?'Gothic Horror Papercraft':product==='deluxe'?'Gas Station Deluxe':'Gas Station Box',currency:'USD',value:product==='gothic'?4.00:product==='deluxe'?5.45:4.75});};
   async function initPaddle(){
     const Paddle=await loadPaddle();
     if (!window.__postapoPaddleInit) {
@@ -74,7 +74,7 @@
     return Paddle;
   }
   const recovered=new URLSearchParams(location.search).get('_ptxn');
-  const currentProduct=location.pathname.includes('deluxe')?'deluxe':location.pathname.includes('gas-station-box')?'box':null;
+  const currentProduct=location.pathname.includes('gothic-horror-papercraft')?'gothic':location.pathname.includes('deluxe')?'deluxe':location.pathname.includes('gas-station-box')?'box':null;
   if(/^txn_[a-z0-9]{10,80}$/.test(recovered||'')&&currentProduct){
     (async()=>{try{
       const r=await fetch('/api/recovery-resume',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({transactionId:recovered,product:currentProduct})});
@@ -86,7 +86,7 @@
   for (const button of buttons) {
     if (CHECKOUT_ENABLED) {
       button.removeAttribute('aria-disabled');
-      button.textContent = button.dataset.buyProduct === 'deluxe' ? 'Buy & Download, $5.45' : 'Buy & Download, $4.75';
+      button.textContent = button.dataset.buyProduct === 'gothic' ? 'Buy & Download, $4.00' : button.dataset.buyProduct === 'deluxe' ? 'Buy & Download, $5.45' : 'Buy & Download, $4.75';
     }
     button.addEventListener('click', async e => {
       e.preventDefault();
